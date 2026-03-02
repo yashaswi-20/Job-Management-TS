@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
 import Company from "../models/company.model.js";
+import getDataUri from "../utils/datauri.js";
+import cloudinary from "../utils/cloudinary.js";
 export const registerCompany = async (req: Request, res: Response): Promise<any> => {
     try {
         const { companyName } = req.body;
@@ -51,8 +53,19 @@ export const updateCompany = async (req: Request, res: Response): Promise<any> =
     try {
         const { name, discription, website, location } = req.body;
         const file = (req as any).file;
-        //cloudnary will be added here for logo
-        const updateData = { name, discription, website, location };
+        let logo;
+
+        if (file) {
+            const fileUri = getDataUri(file);
+            const cloudResponse = await cloudinary.uploader.upload(fileUri.content as string);
+            logo = cloudResponse.secure_url;
+        }
+
+        const updateData: any = { name, discription, website, location };
+        if (logo) {
+            updateData.logo = logo;
+        }
+
         const update = await Company.findByIdAndUpdate(req.params.id, updateData, { new: true })
         if (!update) {
             return res.status(404).json({ msg: 'Company not found' })

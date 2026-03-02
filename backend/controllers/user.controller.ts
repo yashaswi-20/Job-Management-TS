@@ -3,6 +3,8 @@ import Users from '../models/user.model.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import type { Request, Response } from 'express';
+import getDataUri from '../utils/datauri.js';
+import cloudinary from '../utils/cloudinary.js';
 
 export const register = async (req: Request, res: Response): Promise<any> => {
     try {
@@ -15,13 +17,23 @@ export const register = async (req: Request, res: Response): Promise<any> => {
             return res.status(400).json({ msg: 'User already exists' })
         }
 
+        const file = (req as any).file;
+        if (!file) {
+            return res.status(400).json({ msg: 'Profile picture is required' })
+        }
+        const fileUri = getDataUri(file);
+        const cloudResponse = await cloudinary.uploader.upload(fileUri.content as string);
+
         const hashedPassword = await bcrypt.hash(password, 10);
         const newUser = await Users.create({
             fullname,
             email,
             password: hashedPassword,
             phoneNumber,
-            role
+            role,
+            profile: {
+                profilePhoto: cloudResponse.secure_url
+            }
         })
         return res.status(201).json({ msg: 'User registered successfully' })
 
@@ -111,7 +123,16 @@ export const updateProfile = async (req: Request, res: Response): Promise<any> =
         if (bio && user.profile) user.profile.bio = bio;
         if (skills && user.profile) user.profile.skills = skillsArray as any;
 
-        //resume and profile photo will be updated later
+        if (file) {
+            const fileUri = getDataUri(file);
+            const cloudResponse = await cloudinary.uploader.upload(fileUri.content as string);
+
+            // update resume in profile
+            if (cloudResponse && user.profile) {
+                user.profile.resume = cloudResponse.secure_url;
+                user.profile.resumeOriginalName = file.originalname;
+            }
+        }
 
         await user.save();
         const resUser = {
